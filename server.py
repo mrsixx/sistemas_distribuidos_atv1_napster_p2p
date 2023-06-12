@@ -25,6 +25,8 @@ class Server:
     def socket(self):
         return self._socket
     #endregion
+    def close(self) -> None:
+        self.socket.close()
 
     def listen(self) -> None:
         print(f"Servidor iniciado em {self.ip}:{self.port}")
@@ -48,8 +50,10 @@ class Server:
 
 def main():
     server = Server('127.0.0.1', int(input('port:')))
-    print(server)
-    server.listen()
+    try: 
+        server.listen()
+    finally:
+        server.close()
 
 if __name__ == '__main__':
     main()
