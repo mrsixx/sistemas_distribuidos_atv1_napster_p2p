@@ -37,12 +37,10 @@ class Server:
 
     def handle_request(self, client_socket) -> None:
         request = receive_all(client_socket)
-        print('receiving request')
         response = self.process_request(request)
-        print('sending response', response)
         if response != '':
             client_socket.sendall(response.encode())
-        client_socket.close()
+        # client_socket.close()
     
     def process_request(self, request: bytes) -> str:
         return cmd.handle(request.decode())
