@@ -1,6 +1,7 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from dataclasses import dataclass
-from threading import Thread
+from threading import Thread, Lock
+from typing import List
 from mysocket import receive_all
 import command as cmd
 
@@ -14,6 +15,8 @@ class Server:
         self._server_socket = socket(AF_INET, SOCK_STREAM)
         self._server_socket.bind((self.ip, self.port))
         self._server_socket.listen(5)
+        self._files = dict()
+        self._lock = Lock()
 
     #region getters
     @property
@@ -37,17 +40,36 @@ class Server:
             # aguardo um client se conectar
             client_socket, client_address = self.server_socket.accept()
             # despacho para um thread tratar sua requisição
-            handler_thread = self.RequestHandlerThread(client_socket, client_address)
+            handler_thread = self.RequestHandlerThread(self, client_socket, client_address)
             handler_thread.start()
+
+    def get_file_providers(self, file_name) -> List[str]:
+        formatted_file_name = file_name.upper()
+        with self._lock:
+            providers = self._files.get(formatted_file_name)
+            return providers if providers is not None else []
+
+    # registra um client provedor de arquivos
+    def set_file_provider(self, file_name: str, provider_address: str) -> None:
+        formatted_file_name = file_name.upper()
+        with self._lock:
+            if formatted_file_name not in self._files:
+                self._files[formatted_file_name] = []
+            self._files[formatted_file_name].append(provider_address)
 
     # classe aninhada para fazermos o dispatch da requisição para outras threads
     class RequestHandlerThread(Thread):
-        def __init__(self, client_socket, client_address) -> None:
+        def __init__(self, server, client_socket, client_address) -> None:
             Thread.__init__(self)
+            self._server = server
             self._client_socket = client_socket
             self._client_address = client_address
       
         # region getters
+        @property
+        def server(self):
+            return self._server
+        
         @property
         def client_socket(self):
             return self._client_socket
@@ -67,7 +89,7 @@ class Server:
 
         # aciona o command handler para dar o tratamento adequado de acordo com o comando recebido
         def process_request(self, request: bytes) -> str:
-            return cmd.handle(request.decode())
+            return cmd.server_handle(self.server, request.decode(), self.client_address)
 
 def main():
     try:
@@ -76,10 +98,12 @@ def main():
         ip = ip if ip != '' else '127.0.0.1'
         port = int(port) if port != '' else 1099
         server = Server(ip, port)
-
-        server.listen()
-    finally:
-        server.close()
+        try:
+            server.listen()
+        finally:
+            server.close()
+    except Exception as e:
+        print('Erro durante a execução: ', e)
 
 if __name__ == '__main__':
     main()

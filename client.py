@@ -1,10 +1,10 @@
+import os
 import socket
+from threading import Thread
 from dataclasses import dataclass
 import command as cmd
-from threading import Thread
 from mysocket import receive_all
-from time import sleep
-
+from file import list_files
 @dataclass
 class Client:
     def __init__(self, ip: str, port: int, path: str) -> None:
@@ -50,29 +50,40 @@ class Client:
         return response
     
     def open_server_connection(self) -> socket.socket:
-        sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sk.connect((self.server_ip, self.server_port))
-        return sk
+        try:
+            sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sk.connect((self.server_ip, self.server_port))
+            return sk
+        except ConnectionRefusedError:
+            print('Servidor não aceitou a conexão')
 
     def close_server_connection(self, socket: socket.socket) -> None:
-        socket.close()
+        if socket is not None:
+            socket.close()
     # endregion
 
     # region features
     def join(self) -> None:
+        # abre-se uma conexão com o servidor
+        conn = self.open_server_connection()
         try:
-            # abre-se uma conexão com o servidor
-            conn = self.open_server_connection()
-            #TODO: obter nome pasta e buscar nome dos arquivos disponiveis
-            command = cmd.join_command('ablu.mp4', 'shazam.mp3')
-            response = self.send_request(conn, command)
-            if response != '':
-                cmd.join_ok_command_handler()
+            if conn is not None:
+                request_cmd = cmd.join_command(list_files(self.path))
+                response_cmd = self.send_request(conn, request_cmd)
+                cmd.client_handle(response_cmd)
         finally:
             self.close_server_connection(conn)
 
     def search(self) -> None:
-        print('search feature')
+        # abre-se uma conexão com o servidor
+        conn = self.open_server_connection()
+        try:
+            if conn is not None:
+                request_cmd = cmd.search_command(input('Nome do arquivo: '))
+                response_cmd = self.send_request(conn, request_cmd)
+                cmd.client_handle(response_cmd)
+        finally:
+            self.close_server_connection(conn)
 
     def download(self) -> None:
         print('download feature')
@@ -143,18 +154,25 @@ class Client:
             print(f'Enviando o arquivo xxxxx para {self.peer_address}...')
 
 
-def main(dev_enviroment = False):
-    #TODO: validar
-    ip = input('IP: ')
-    if dev_enviroment:
-        ip = ip if ip != '' else '127.0.0.1'
-    
-    port = int(input('Port: '))    
-    path = input('Path: ')
-    
-    client = Client(ip, port, path)
-    client.run_iteractive_menu()
-    client.listen_download_requests()
+def main():
+    try:
+        #TODO: validar
+        ip = input('IP: ')
+        port = int(input('Port: '))    
+        path = input('Path: ')
+        
+        if port <= 0:
+            raise ValueError('Porta não especificada')
+        if not os.path.isdir(path):
+            raise ValueError(f'{path} não é um diretorio valido')
+        
+        client = Client(ip, port, path)
+        client.run_iteractive_menu()
+        client.listen_download_requests()
+    except ValueError as error:
+        print(error)
+    except KeyboardInterrupt:
+        print('\nsaindo...')
 
 if __name__ == '__main__':
     main()
