@@ -3,8 +3,9 @@ import socket
 from threading import Thread
 from dataclasses import dataclass
 import command as cmd
-from mysocket import receive_all
+from mysocket import receive_all, download_file
 from file import list_files
+
 @dataclass
 class Client:
     def __init__(self, ip: str, port: int, path: str) -> None:
@@ -49,6 +50,10 @@ class Client:
         response = receive_all(socket)
         return response
     
+    def request_download(self, socket: socket.socket, request: str) -> None:
+        socket.sendall(request.encode())
+        download_file(f'{self.path}/teste.mp4', socket)
+
     def open_server_connection(self) -> socket.socket:
         try:
             sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,6 +61,14 @@ class Client:
             return sk
         except ConnectionRefusedError:
             print('Servidor não aceitou a conexão')
+    
+    def open_peer_connection(self, peer_ip: str, peer_port: int) -> socket.socket:
+        try:
+            sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sk.connect((peer_ip, peer_port))
+            return sk
+        except ConnectionRefusedError:
+            print(f'Peer {peer_ip}:{peer_port} não aceitou a conexão')
 
     def close_server_connection(self, socket: socket.socket) -> None:
         if socket is not None:
@@ -68,7 +81,7 @@ class Client:
         conn = self.open_server_connection()
         try:
             if conn is not None:
-                request_cmd = cmd.join_command(list_files(self.path))
+                request_cmd = cmd.join_command(list_files(self.path), self.port)
                 response_cmd = self.send_request(conn, request_cmd)
                 cmd.client_handle(response_cmd)
         finally:
@@ -86,7 +99,16 @@ class Client:
             self.close_server_connection(conn)
 
     def download(self) -> None:
-        print('download feature')
+        #leio a entrada dos parametros
+        file_name, ip, port = input('O que deseja baixar? Digite nome_do_arquivo ip porta: ').split(' ')
+        # abre-se uma conexão com o peer ip:port
+        conn = self.open_peer_connection(ip, int(port))
+        try:
+            if conn is not None:
+                request_cmd = cmd.download_command(file_name)
+                self.request_download(conn, request_cmd)
+        finally:
+            self.close_server_connection(conn)
     
     # endregion
 
@@ -118,15 +140,18 @@ class Client:
         # override na função run da thread para execução do menu iterativo
         def run(self):
             while True:
-                option = int(input('1 - JOIN | 2 - SEARCH | 3 - DOWNLOAD: '))
-                if option == 1:
-                    self.client.join()
-                elif option == 2:
-                    self.client.search()
-                elif option == 3:
-                    self.client.download()
-                else:
-                    print('Opção inexistente.\n')
+                try:
+                    option = int(input('1 - JOIN | 2 - SEARCH | 3 - DOWNLOAD: '))
+                    if option == 1:
+                        self.client.join()
+                    elif option == 2:
+                        self.client.search()
+                    elif option == 3:
+                        self.client.download()
+                    else:
+                        print('Opção inexistente.\n')
+                except Exception as e:
+                    print('\n Erro crítico', e)
 
     # classe aninhada para tratar as solicitações de download despachadas
     class DownloadRequestHandlerThread(Thread):
@@ -151,16 +176,26 @@ class Client:
         # endregion
 
         def run(self):
-            print(f'Enviando o arquivo xxxxx para {self.peer_address}...')
-
+            try:
+                request = receive_all(self.peer_socket)
+                file_name = cmd.client_handle(request)
+                print(f'Enviando o arquivo {file_name} para {self.peer_address}...\n')
+                with open(f'{self.client.path}/{file_name}', 'rb') as file:
+                    for line in file.readlines():
+                        self.peer_socket.sendall(line)
+                print('enviado...\n')
+                self.peer_socket.close()
+            except Exception as e:
+                # TODO: resolver problema com arquivos grandes (1gb) (Terminated)
+                print(e)
 
 def main():
     try:
         #TODO: validar
         ip = input('IP: ')
         port = int(input('Port: '))    
-        path = input('Path: ')
-        
+        #path = input('Path: ')
+        path = f'./files/cli{input("Path_dev: ")}'
         if port <= 0:
             raise ValueError('Porta não especificada')
         if not os.path.isdir(path):
