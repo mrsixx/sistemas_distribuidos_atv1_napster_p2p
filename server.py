@@ -15,6 +15,7 @@ class Server:
         self._server_socket = socket(AF_INET, SOCK_STREAM)
         self._server_socket.bind((self.ip, self.port))
         self._server_socket.listen(5)
+        # estrutura de dados para armazenamento dos usuarios registrados
         self._files = dict()
         self._lock = Lock()
 
@@ -46,16 +47,23 @@ class Server:
     def get_file_providers(self, file_name) -> List[str]:
         formatted_file_name = file_name.upper()
         with self._lock:
-            providers = self._files.get(formatted_file_name)
-            return providers if providers is not None else []
+            file_providers = self._files.get(formatted_file_name)
+            if file_providers is None:
+                return []
 
-    # registra um client provedor de arquivos
-    def set_file_provider(self, file_name: str, provider_address: str) -> None:
+            format_providers = lambda d: [f'{ip}:{port}' for ip, ports in d.items() for port in ports.keys()]
+            return format_providers(file_providers)
+
+    # registra um client provedor de arquivos em um dicionario tridimensional para otimizar a busca
+    def set_file_provider(self, file_name: str, ip: str, port: int) -> None:
         formatted_file_name = file_name.upper()
         with self._lock:
             if formatted_file_name not in self._files:
-                self._files[formatted_file_name] = []
-            self._files[formatted_file_name].append(provider_address)
+                self._files[formatted_file_name] = dict()
+            if ip not in self._files[formatted_file_name]:
+                self._files[formatted_file_name][ip] = dict()
+            
+            self._files[formatted_file_name][ip][port] = 1
 
     # classe aninhada para fazermos o dispatch da requisição para outras threads
     class RequestHandlerThread(Thread):

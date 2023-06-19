@@ -205,7 +205,7 @@ class Client:
 
         def upload_file(self, file_name):
             with open(f'{self.client.path}/{file_name}', 'rb') as file:
-                for line in file.readlines():
+                for line in file.readline():
                     self.peer_socket.sendall(line)
 
 def main():
