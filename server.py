@@ -1,7 +1,7 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from dataclasses import dataclass
 from threading import Thread, Lock
-from typing import List
+from typing import Dict, List
 from mysocket import receive_all
 import command as cmd
 
@@ -82,14 +82,16 @@ class Server:
         # sobrescrevendo a função run
         def run(self):
             request = receive_all(self.client_socket)
-            response = self.process_request(request)
-            if response != '':
-                self.client_socket.sendall(response.encode())
+            response_cmd = self.process_request(request)
+            if response_cmd is not None:
+                self.client_socket.sendall(cmd.serialize(response_cmd).encode())
             self.client_socket.close()
 
         # aciona o command handler para dar o tratamento adequado de acordo com o comando recebido
-        def process_request(self, request: bytes) -> str:
-            return cmd.server_handle(self.server, request.decode(), self.client_address)
+        def process_request(self, request: bytes) -> Dict:
+            command = cmd.deserialize(request.decode())
+            command['sender'] = {'ip': self.client_address[0], 'port': self.client_address[1]}
+            return cmd.server_handle(self.server, command)
 
 def main():
     try:

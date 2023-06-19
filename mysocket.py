@@ -8,9 +8,10 @@ def receive_all(socket) -> bytes:
             break
     return content
 
-def download_file(file_name, socket) -> None:
+def download_file(path: str, file_name: str, socket) -> None:
     buffer_size = 1024
-    with open(file_name, 'wb') as file:
+    #TODO: validar se diretorio existe
+    with open(f'{path}/{file_name}', 'wb') as file:
         while True:
             temp = socket.recv(buffer_size)
             if not temp:

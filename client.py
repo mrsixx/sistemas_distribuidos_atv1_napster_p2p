@@ -1,6 +1,7 @@
 import os
 import socket
 from threading import Thread
+from typing import Dict
 from dataclasses import dataclass
 import command as cmd
 from mysocket import receive_all, download_file
@@ -45,14 +46,17 @@ class Client:
     # endregion
 
     # region funções de comunicação com o servidor
-    def send_request(self, socket: socket.socket, request: str) -> str:
-        socket.sendall(request.encode())
+    def send_request(self, socket: socket.socket, request_cmd: Dict) -> str:
+        cmd_str = cmd.serialize(request_cmd)
+        socket.sendall(cmd_str.encode())
         response = receive_all(socket)
         return response
     
-    def request_download(self, socket: socket.socket, request: str) -> None:
-        socket.sendall(request.encode())
-        download_file(f'{self.path}/teste.mp4', socket)
+    def request_download(self, socket: socket.socket, download_cmd: Dict) -> None:
+        file_name = download_cmd['file_name']
+        cmd_str = cmd.serialize(download_cmd)
+        socket.sendall(cmd_str.encode())
+        download_file(self.path, file_name, socket)
 
     def open_server_connection(self) -> socket.socket:
         try:
@@ -81,9 +85,12 @@ class Client:
         conn = self.open_server_connection()
         try:
             if conn is not None:
+                # solicita a factory a criação de um join command
                 request_cmd = cmd.join_command(list_files(self.path), self.port)
-                response_cmd = self.send_request(conn, request_cmd)
-                cmd.client_handle(response_cmd)
+                # envia o command ao server e aguarda o comando de resposta
+                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                # processa o comando de resposta
+                cmd.join_ok_command_handler(response_cmd)
         finally:
             self.close_server_connection(conn)
 
@@ -92,9 +99,11 @@ class Client:
         conn = self.open_server_connection()
         try:
             if conn is not None:
+                # solicita a factory a criação de um search command
                 request_cmd = cmd.search_command(input('Nome do arquivo: '))
-                response_cmd = self.send_request(conn, request_cmd)
-                cmd.client_handle(response_cmd)
+                # envia o command ao server e aguarda o comando de resposta
+                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                cmd.search_result_command_handler(response_cmd)
         finally:
             self.close_server_connection(conn)
 
@@ -105,7 +114,9 @@ class Client:
         conn = self.open_peer_connection(ip, int(port))
         try:
             if conn is not None:
+                # solicita a factory a criação de um download command
                 request_cmd = cmd.download_command(file_name)
+                # envia o command para o server e faz o download do arquivo
                 self.request_download(conn, request_cmd)
         finally:
             self.close_server_connection(conn)
@@ -177,17 +188,25 @@ class Client:
 
         def run(self):
             try:
-                request = receive_all(self.peer_socket)
-                file_name = cmd.client_handle(request)
+                # aguardo o recebimento do download command
+                download_cmd = cmd.deserialize(receive_all(self.peer_socket))
+                # obtenho o nome do arquivo a partir do comando recebido
+                file_name = cmd.download_command_handler(download_cmd)
+                #TODO: validar se o arquivo existe
+                #TODO: solicitar confirmação
                 print(f'Enviando o arquivo {file_name} para {self.peer_address}...\n')
-                with open(f'{self.client.path}/{file_name}', 'rb') as file:
-                    for line in file.readlines():
-                        self.peer_socket.sendall(line)
-                print('enviado...\n')
+                # faço o upload do arquivo solicitado
+                self.upload_file(file_name)
+                # encerro a conexão com o peer requisitante
                 self.peer_socket.close()
             except Exception as e:
                 # TODO: resolver problema com arquivos grandes (1gb) (Terminated)
                 print(e)
+
+        def upload_file(self, file_name):
+            with open(f'{self.client.path}/{file_name}', 'rb') as file:
+                for line in file.readlines():
+                    self.peer_socket.sendall(line)
 
 def main():
     try:
