@@ -108,22 +108,20 @@ class Client:
         finally:
             self.close_server_connection(conn)
 
-    def search(self) -> None:
+    def search(self, file_name: str) -> None:
         # abre-se uma conexão com o servidor
         conn = self.open_server_connection()
         try:
             if conn is not None:
                 # solicita a factory a criação de um search command
-                request_cmd = self.search_command_factory(input('Nome do arquivo: '))
+                request_cmd = self.search_command_factory(file_name)
                 # envia o command ao server e aguarda o comando de resposta
                 response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
                 self.search_result_command_handler(response_cmd)
         finally:
             self.close_server_connection(conn)
 
-    def download(self) -> None:
-        #leio a entrada dos parametros
-        file_name, ip, port = input('O que deseja baixar? Digite nome_do_arquivo ip porta: ').split(' ')
+    def download(self, file_name: str, ip: str, port: int) -> None:
         # abre-se uma conexão com o peer ip:port
         conn = self.open_peer_connection(ip, int(port))
         try:
@@ -139,13 +137,13 @@ class Client:
         finally:
             self.close_server_connection(conn)
     
-    def update(self) -> None:
+    def update(self, file_name: str) -> None:
         # abre-se uma conexão com o servidor
         conn = self.open_server_connection()
         try:
             if conn is not None:
                 # solicita a factory a criação de um update command
-                request_cmd = self.update_command_factory(input('Nome do arquivo: '), self.port)
+                request_cmd = self.update_command_factory(file_name, self.port)
                 # envia o command ao server e aguarda o comando de resposta
                 response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
                 self.update_ok_command_handler(response_cmd)
@@ -226,25 +224,47 @@ class Client:
 
         # override na função run da thread para execução do menu iterativo
         def run(self):
+            print('Napster P2P -- Digite HELP caso precise de ajuda.')
             while True:
                 try:
-                    option = int(input('1 - JOIN | 2 - SEARCH | 3 - DOWNLOAD | 4 - UPDATE: '))
-                    if option == 1:
+                    cli_input = input('\n>>> ').split(' ')
+                    main_cmd = cli_input[0].upper()
+                    args = cli_input[1:]
+
+                    if main_cmd == 'JOIN':
                         self.client.join()
-                    elif option == 2:
-                        self.client.search()
-                    elif option == 3:
-                        self.client.download()
-                    elif option == 4:
-                        self.client.update()
+                    elif main_cmd == 'SEARCH':
+                        if len(args) < 1:
+                            raise Exception('SEARCH espera pelo parâmetro `nome_arquivo`.\n')
+                        self.client.search(file_name=args[0])
+                    elif main_cmd == 'DOWNLOAD':
+                        if len(args) < 3:
+                            raise Exception('DOWNLOAD espera pelos parâmetros `nome_arquivo`, `ip` e `porta`.\n')
+
+                        file_name, ip, port = args[0], args[1], args[2]
+                        if not port.isdigit():
+                            raise Exception('A porta especificada deve ser um valor inteiro válido.\n')
+
+                        self.client.download(file_name, ip, int(port))
+                    elif main_cmd == 'UPDATE':
+                        if len(args) < 1:
+                            raise Exception('UPDATE espera pelo parâmetro `nome_arquivo`.\n')
+                        self.client.update(file_name=args[0])
+                    elif main_cmd == 'HELP':
+                        print('Os comandos disponíveis são:\n')
+                        print('JOIN: Indica ao servidor o desejo de se juntar a rede.\n')
+                        print('SEARCH nome_arquivo: Busca pelos peers que contém o arquivo `nome_arquivo`.\n')
+                        print('DOWNLOAD nome_arquivo ip porta: Solicita ao peer no endereço ip:porta pelo arquivo `nome_arquivo`.\n')
+                        print('UPDATE nome_arquivo: Envia ao servidor uma solicitação de alteração no registro para incluir `nome_arquivo`.\n')
                     else:
-                        print('Opção inexistente.\n')
+                        pass
                         
                 except (KeyboardInterrupt, EOFError):
-                    print('saindo...\n')
+                    print('\nSaindo...')
                     break
                 except Exception as e:
-                    print('Erro ao concluir a operação:', e)
+                    print('Erro:', e)
+                    print('\n')
                     pass
             os._exit(os.EX_OK) 
     

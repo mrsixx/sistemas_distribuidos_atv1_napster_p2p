@@ -70,7 +70,6 @@ class Server:
         return self.search_result_command_factory(search_result)
 
     def update_command_handler(self, update_cmd: Dict) -> Dict:
-        print(update_cmd)
         file_name, ip, port = update_cmd['file_name'], update_cmd['sender']['ip'], update_cmd['client_port']
         self.set_file_provider(file_name, ip, port)
         return self.update_ok_command_factory()
@@ -150,7 +149,7 @@ class Server:
 def main():
     try:
         ip = input('IP (default 127.0.0.1): ') or '127.0.0.1'
-        port = input('Port (default 1099): ' or '1099')
+        port = int(input('Port (default 1099): ') or '1099')
         server = Server(ip, port)
         try:
             server.listen()
