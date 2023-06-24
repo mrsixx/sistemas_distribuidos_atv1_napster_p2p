@@ -149,10 +149,8 @@ class Server:
 
 def main():
     try:
-        ip = input('IP (default 127.0.0.1): ')
-        port = input('Port (default 1099): ')
-        ip = ip if ip != '' else '127.0.0.1'
-        port = int(port) if port != '' else 1099
+        ip = input('IP (default 127.0.0.1): ') or '127.0.0.1'
+        port = input('Port (default 1099): ' or '1099')
         server = Server(ip, port)
         try:
             server.listen()

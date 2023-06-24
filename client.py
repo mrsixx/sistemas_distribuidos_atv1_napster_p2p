@@ -48,15 +48,16 @@ class Client:
     # endregion
 
     # region funções de comunicação com o servidor
+    # envia um comando sem esperar pela resposta
     def send_and_forget(self, socket: socket.socket, request_cmd: str) -> None:
         cmd_str = cmd.serialize(request_cmd)
         socket.sendall(cmd_str.encode())
-
+    # envia um comando e aguarda a resposta
     def send_request(self, socket: socket.socket, request_cmd: Dict) -> str:
         self.send_and_forget(socket, request_cmd)
         response = receive_all(socket)
         return response
-    
+    # envia a solicitação de download e caso permitida faz o download na pasta do client
     def request_download(self, socket: socket.socket, download_cmd: Dict) -> bool:
         # envia requisição de download
         cmd_str = cmd.serialize(download_cmd)
@@ -143,7 +144,7 @@ class Client:
         conn = self.open_server_connection()
         try:
             if conn is not None:
-                # solicita a factory a criação de um search command
+                # solicita a factory a criação de um update command
                 request_cmd = self.update_command_factory(input('Nome do arquivo: '), self.port)
                 # envia o command ao server e aguarda o comando de resposta
                 response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
@@ -173,20 +174,25 @@ class Client:
     # endregion
     
     # region command handlers
+    # handler responsavel por tratar confirmações de join
     def join_ok_command_handler(self, join_ok_cmd: Dict) -> None:
         files, sender_address = join_ok_cmd['files'], join_ok_cmd['sender_address']
         print(f'Sou peer {sender_address} com arquivos {", ".join(files)}')
 
+    # handler responsavel por tratar resultados de buscas
     def search_result_command_handler(self, search_result_cmd: Dict) -> None:
         results = search_result_cmd['results']
         print(f'peers com arquivo solicitado: {", ".join(results)}')
 
+    # handler responsavel por tratar solicitações de download
     def download_command_handler(self, download_cmd: Dict) -> str:
         return download_cmd['file_name']
     
+    # handler responsavel por tratar confirmações de download
     def download_ok_command_hander(self, download_ok: Dict) -> None:
         print('Arquivo [só nome do arquivo] baixado com sucesso na pasta [nome da pasta]')
 
+    # handler responsavel por tratar confirmações de update
     def update_ok_command_handler(self, update_ok_cmd: Dict) -> None:
         print('Registro atualizado com sucesso')
         
@@ -241,6 +247,7 @@ class Client:
                     print('Erro ao concluir a operação:', e)
                     pass
             os._exit(os.EX_OK) 
+    
     # classe aninhada para tratar as solicitações de download despachadas
     class DownloadRequestHandlerThread(Thread):
         def __init__(self, client, peer_socket: socket.socket, peer_address: str) -> None:
@@ -270,8 +277,8 @@ class Client:
                 # obtenho o nome do arquivo a partir do comando recebido
                 file_name = self.client.download_command_handler(download_cmd)
                 file_path = f'{self.client.path}/{file_name}'
-                
                 if os.path.isfile(file_path):
+                    # se o arquivo solicitado existir, envio para o requisitante suas informações (nome, tamanho)
                     file_size = int(os.path.getsize(file_path))
                     self.client.send_and_forget(self.peer_socket, self.client.file_properties_command_factory(file_name, file_size))
                     print(f'Enviando o arquivo {file_name} para {self.peer_address}...\n')
@@ -286,24 +293,26 @@ class Client:
                 print(e)
 
         def upload_file(self, file_name):
+            # abro o arquivo com permissão de leitura e para cada linha do arquivo envio um pacote via TCP
             with open(f'{self.client.path}/{file_name}', 'rb') as file:
                 for line in file.readlines():
                     self.peer_socket.sendall(line)
 
 def main():
     try:
-        #TODO: validar
-        ip = input('IP: ')
-        port = int(input('Port: '))    
-        #path = input('Path: ')
-        path = f'./files/cli{input("Path_dev: ")}'
+        ip = input('Seu IP (default 127.0.0.1): ') or '127.0.0.1'
+        port = int(input('Sua porta: ') or '0')    
+        path = input('Seu diretório: ')
         if port <= 0:
             raise ValueError('Porta não especificada')
         if not os.path.isdir(path):
-            raise ValueError(f'{path} não é um diretorio valido')
+            raise ValueError(f'`{path}` não é um diretorio valido')
 
+        # instancio o client
         client = Client(ip, port, path)
+        # coloco a command line interface do client para rodar
         client.run_iteractive_menu()
+        # coloco o client para se tornar disponivel para responder requisições de download
         client.listen_download_requests()
     except ValueError as error:
         print(error)
