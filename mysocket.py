@@ -12,17 +12,18 @@ def receive_all(socket) -> bytes:
             break
     return content
 
-def download_file(path: str, file_name: str, socket) -> Dict:
+def download_file(path: str, file_name: str, file_size: int, socket) -> Dict:
     try:
-        buffer_size = 4096
+        mb = 1024
+        buffer_size = 10 * mb
         # recebo do peer provider o tamanho do arquivo
-        server_file_size = int(socket.recv(buffer_size).decode())
+        server_file_size = file_size
         local_file_path = f'{path}/{file_name}'
         if not os.path.isdir(path):
             raise Exception('Diretorio destino não existe')
 
         # crio uma barra de progresso para o download
-        bar = tqdm(range(server_file_size), f"Baixando {file_name}", unit="B", unit_scale=True, unit_divisor=buffer_size/2)
+        bar = tqdm(range(server_file_size), f"Baixando {file_name}", unit="B", unit_scale=True, unit_divisor=mb)
         # crio o arquivo com permissão de escrita
         with open(local_file_path, 'wb') as file:
             while True:
@@ -33,7 +34,6 @@ def download_file(path: str, file_name: str, socket) -> Dict:
                     break
                 file.write(temp)
                 bar.update(len(temp))
-        print('\n\n')                
         # o download foi bem sucedido se o arquivo criado tiver o mesmo tamanho do original
         local_file_size = os.path.getsize(local_file_path)
         return { 'success': local_file_size == server_file_size, 'message': '' }

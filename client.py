@@ -1,4 +1,5 @@
 import os
+import sys
 import socket
 from threading import Thread
 from typing import Dict
@@ -47,17 +48,28 @@ class Client:
     # endregion
 
     # region funções de comunicação com o servidor
-    def send_request(self, socket: socket.socket, request_cmd: Dict) -> str:
+    def send_and_forget(self, socket: socket.socket, request_cmd: str) -> None:
         cmd_str = cmd.serialize(request_cmd)
         socket.sendall(cmd_str.encode())
+
+    def send_request(self, socket: socket.socket, request_cmd: Dict) -> str:
+        self.send_and_forget(socket, request_cmd)
         response = receive_all(socket)
         return response
     
     def request_download(self, socket: socket.socket, download_cmd: Dict) -> bool:
+        # envia requisição de download
         cmd_str = cmd.serialize(download_cmd)
         socket.sendall(cmd_str.encode())
-        download_success = download_file(self.path, download_cmd['file_name'],socket)
-        return download_success
+        # aguarda confirmação com propriedades do arquivo (se existe, etc)
+        file_prop_cmd = cmd.deserialize(receive_all(socket))
+        file_name, file_size = file_prop_cmd['name'], file_prop_cmd['size']
+        if file_size <= 0:
+            return { 'success': False, 'message': f'{file_name} não existe.\n' }
+        
+        # faz o download do arquivo
+        download_status = download_file(self.path, file_name, file_size, socket)
+        return download_status
 
     def open_server_connection(self) -> socket.socket:
         try:
@@ -118,16 +130,30 @@ class Client:
                 # solicita a factory a criação de um download command
                 request_cmd = self.download_command_factory(file_name)
                 # envia o command para o server e faz o download do arquivo
-                is_success = self.request_download(conn, request_cmd)
-                if not is_success:
-                    raise Exception('Erro ao concluir o download...')
+                download_status = self.request_download(conn, request_cmd)
+                if not download_status['success']:
+                    raise Exception(download_status['message'])
+                else:
+                    print(f'Arquivo {file_name} baixado com sucesso na pasta {self.path}\n')
         finally:
             self.close_server_connection(conn)
     
+    def update(self) -> None:
+        # abre-se uma conexão com o servidor
+        conn = self.open_server_connection()
+        try:
+            if conn is not None:
+                # solicita a factory a criação de um search command
+                request_cmd = self.update_command_factory(input('Nome do arquivo: '), self.port)
+                # envia o command ao server e aguarda o comando de resposta
+                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                self.update_ok_command_handler(response_cmd)
+        finally:
+            self.close_server_connection(conn)
     # endregion
 
     # region factories
-    def join_command_factory(self, files, client_port) -> Dict:
+    def join_command_factory(self, files, client_port: int) -> Dict:
         return { 'name': 'JOIN', 'files': files, 'client_port': client_port }
 
     def search_command_factory(self, file_name: str) -> Dict:
@@ -135,6 +161,15 @@ class Client:
     
     def download_command_factory(self, file_name: str) -> Dict:
         return { 'name': 'DOWNLOAD', 'file_name': file_name }
+
+    def download_ok_command_factory(self, file_name: str) -> Dict:
+        return { 'name': 'DOWNLOAD_OK', 'file_name': file_name }
+    
+    def update_command_factory(self, file_name: str, client_port: int):
+        return { 'name': 'UPDATE', 'file_name': file_name, 'client_port': client_port }
+    
+    def file_properties_command_factory(self, file_name: str, file_size: int):
+        return { 'name': 'FILE', 'name': file_name, 'size': file_size }
     # endregion
     
     # region command handlers
@@ -148,6 +183,13 @@ class Client:
 
     def download_command_handler(self, download_cmd: Dict) -> str:
         return download_cmd['file_name']
+    
+    def download_ok_command_hander(self, download_ok: Dict) -> None:
+        print('Arquivo [só nome do arquivo] baixado com sucesso na pasta [nome da pasta]')
+
+    def update_ok_command_handler(self, update_ok_cmd: Dict) -> None:
+        print('Registro atualizado com sucesso')
+        
     # endregion
 
     def listen_download_requests(self) -> None:
@@ -161,6 +203,7 @@ class Client:
     def run_iteractive_menu(self) -> None:
         handler_thread = self.IteractiveMenuThread(self)
         handler_thread.start()
+
 
     # classe aninhada para executar o menu iterativo
     class IteractiveMenuThread(Thread):
@@ -179,20 +222,25 @@ class Client:
         def run(self):
             while True:
                 try:
-                    option = int(input('1 - JOIN | 2 - SEARCH | 3 - DOWNLOAD: '))
+                    option = int(input('1 - JOIN | 2 - SEARCH | 3 - DOWNLOAD | 4 - UPDATE: '))
                     if option == 1:
                         self.client.join()
                     elif option == 2:
                         self.client.search()
                     elif option == 3:
                         self.client.download()
+                    elif option == 4:
+                        self.client.update()
                     else:
                         print('Opção inexistente.\n')
                         
-                except KeyboardInterrupt:
-                    print('\nsaindo...')
+                except (KeyboardInterrupt, EOFError):
+                    print('saindo...\n')
                     break
-
+                except Exception as e:
+                    print('Erro ao concluir a operação:', e)
+                    pass
+            os._exit(os.EX_OK) 
     # classe aninhada para tratar as solicitações de download despachadas
     class DownloadRequestHandlerThread(Thread):
         def __init__(self, client, peer_socket: socket.socket, peer_address: str) -> None:
@@ -224,13 +272,13 @@ class Client:
                 file_path = f'{self.client.path}/{file_name}'
                 
                 if os.path.isfile(file_path):
-                    file_size = os.path.getsize(file_path)
-                    self.peer_socket.sendall(f'{file_size}'.encode())
-                    print(f'\nEnviando o arquivo {file_name} para {self.peer_address}...\n')
+                    file_size = int(os.path.getsize(file_path))
+                    self.client.send_and_forget(self.peer_socket, self.client.file_properties_command_factory(file_name, file_size))
+                    print(f'Enviando o arquivo {file_name} para {self.peer_address}...\n')
                     # faço o upload do arquivo solicitado
                     self.upload_file(file_name)
                 else:
-                    print(f'\n Solicitação de download negada: {file_name} não existe.')
+                    self.client.send_and_forget(self.peer_socket, self.client.file_properties_command_factory(file_name, file_size=0))
                 
                 # encerro a conexão com o peer requisitante
                 self.peer_socket.close()

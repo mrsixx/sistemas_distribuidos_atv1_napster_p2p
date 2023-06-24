@@ -39,6 +39,9 @@ class Server:
 
     def search_result_command_factory(self, results: List[str]) -> Dict:
         return { 'name': 'SEARCH_RESULT', 'results': results }
+    
+    def update_ok_command_factory(self) -> Dict:
+        return { 'name': 'UPDATE_OK' }
     # endregion
 
     # region command handlers
@@ -48,6 +51,8 @@ class Server:
             return self.join_command_handler(command)
         if cmd_name == 'SEARCH':
             return self.search_command_handler(command)
+        if cmd_name == 'UPDATE':
+            return self.update_command_handler(command)
         return ''
 
     def join_command_handler(self, join_cmd: Dict) -> Dict:
@@ -63,6 +68,12 @@ class Server:
         print(f'Peer {sender["ip"]}:{sender["port"]} está procurando pelo arquivo {file_name}')
         search_result = self.get_file_providers(file_name)
         return self.search_result_command_factory(search_result)
+
+    def update_command_handler(self, update_cmd: Dict) -> Dict:
+        print(update_cmd)
+        file_name, ip, port = update_cmd['file_name'], update_cmd['sender']['ip'], update_cmd['client_port']
+        self.set_file_provider(file_name, ip, port)
+        return self.update_ok_command_factory()
     # endregion
 
     def close(self) -> None:
@@ -70,11 +81,14 @@ class Server:
 
     def listen(self) -> None:
         while True:
-            # aguardo um client se conectar
-            client_socket, client_address = self.server_socket.accept()
-            # despacho para um thread tratar sua requisição
-            handler_thread = self.RequestHandlerThread(self, client_socket, client_address)
-            handler_thread.start()
+            try:
+                # aguardo um client se conectar
+                client_socket, client_address = self.server_socket.accept()
+                # despacho para um thread tratar sua requisição
+                handler_thread = self.RequestHandlerThread(self, client_socket, client_address)
+                handler_thread.start()
+            except:
+                pass
 
     def get_file_providers(self, file_name) -> List[str]:
         formatted_file_name = file_name.upper()
