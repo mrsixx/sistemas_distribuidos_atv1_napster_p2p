@@ -53,13 +53,11 @@ class Client:
         response = receive_all(socket)
         return response
     
-    def request_download(self, socket: socket.socket, download_cmd: Dict) -> str:
+    def request_download(self, socket: socket.socket, download_cmd: Dict) -> bool:
         cmd_str = cmd.serialize(download_cmd)
         socket.sendall(cmd_str.encode())
         download_success = download_file(self.path, download_cmd['file_name'],socket)
-        download_conf_cmd = self.download_confirmation_command_factory(download_success)
-        return cmd.serialize(download_conf_cmd)
-        
+        return download_success
 
     def open_server_connection(self) -> socket.socket:
         try:
@@ -120,9 +118,9 @@ class Client:
                 # solicita a factory a criação de um download command
                 request_cmd = self.download_command_factory(file_name)
                 # envia o command para o server e faz o download do arquivo
-                confirmation_cmd = self.request_download(conn, request_cmd)
-                # envio a confirmação(ou não) de download
-                conn.sendall(confirmation_cmd.encode())
+                is_success = self.request_download(conn, request_cmd)
+                if not is_success:
+                    raise Exception('Erro ao concluir o download...')
         finally:
             self.close_server_connection(conn)
     
@@ -137,8 +135,6 @@ class Client:
     
     def download_command_factory(self, file_name: str) -> Dict:
         return { 'name': 'DOWNLOAD', 'file_name': file_name }
-    def download_confirmation_command_factory(self, success: bool) -> Dict:
-        return { 'name': 'DOWNLOAD_OK', 'success': success }
     # endregion
     
     # region command handlers
@@ -192,8 +188,10 @@ class Client:
                         self.client.download()
                     else:
                         print('Opção inexistente.\n')
-                except Exception as e:
-                    print('\n Erro crítico', e)
+                        
+                except KeyboardInterrupt:
+                    print('\nsaindo...')
+                    break
 
     # classe aninhada para tratar as solicitações de download despachadas
     class DownloadRequestHandlerThread(Thread):
@@ -231,18 +229,12 @@ class Client:
                     print(f'\nEnviando o arquivo {file_name} para {self.peer_address}...\n')
                     # faço o upload do arquivo solicitado
                     self.upload_file(file_name)
-                    #aguardo a confirmação de download
-                    download_confirmation_cmd = cmd.deserialize(receive_all(self.peer_socket))
-                    if download_confirmation_cmd['success']:
-                        print('\n{file_name} enviado com sucesso.')
                 else:
                     print(f'\n Solicitação de download negada: {file_name} não existe.')
                 
-
                 # encerro a conexão com o peer requisitante
                 self.peer_socket.close()
             except Exception as e:
-                # TODO: resolver problema com arquivos grandes (1gb) (Terminated)
                 print(e)
 
         def upload_file(self, file_name):
@@ -267,8 +259,6 @@ def main():
         client.listen_download_requests()
     except ValueError as error:
         print(error)
-    except KeyboardInterrupt:
-        print('\nsaindo...')
 
 if __name__ == '__main__':
     main()

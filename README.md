@@ -32,9 +32,10 @@ O Napster P2P possui as seguintes funcionalidades:
 
 1. Clone o repositório em sua máquina local.
 2. Certifique-se de ter o Python 3.8 (ou superior) instalado em seu sistema.
-3. Execute o servidor executando o arquivo `server.py`.
-4. Execute os peers executando o arquivo `peer.py`.
-5. Siga as instruções apresentadas na console para realizar ações como JOIN, SEARCH e DOWNLOAD.
+3. Execute a partir da raiz do projeto o comando `python -m pip install -r requirements.txt`
+4. Execute o servidor executando o arquivo `server.py`.
+5. Execute os peers executando o arquivo `peer.py`.
+6. Siga as instruções apresentadas na console para realizar ações como JOIN, SEARCH e DOWNLOAD.
 
 ## 📜 Licença
 

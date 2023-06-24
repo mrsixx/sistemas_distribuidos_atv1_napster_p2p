@@ -6,3 +6,6 @@ __pycache__/file.cpython-310.pyc
 __pycache__/server.cpython-310.pyc
 .gitignore
 .client.txt.swp
+/.vs/sistemas_distribuidos_atv1_napster_p2p/FileContentIndex
+/.vs
+/__pycache__
