@@ -1,8 +1,8 @@
 __pycache__/command.cpython-310.pyc
-command.py
 __pycache__/mysocket.cpython-310.pyc
 client.txt
 files
 __pycache__/file.cpython-310.pyc
 __pycache__/server.cpython-310.pyc
 .gitignore
+.client.txt.swp

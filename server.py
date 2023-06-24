@@ -33,6 +33,38 @@ class Server:
         return self._server_socket
     #endregion
 
+    # region factories
+    def join_ok_command_factory(self, files, sender_address) -> Dict:
+        return { 'name': 'JOIN_OK', 'files': files, 'sender_address': sender_address }
+
+    def search_result_command_factory(self, results: List[str]) -> Dict:
+        return { 'name': 'SEARCH_RESULT', 'results': results }
+    # endregion
+
+    # region command handlers
+    def server_handle(self, command: Dict) -> Dict:
+        cmd_name = command['name'].upper() if command['name'] is not None else ''
+        if cmd_name == 'JOIN':
+            return self.join_command_handler(command)
+        if cmd_name == 'SEARCH':
+            return self.search_command_handler(command)
+        return ''
+
+    def join_command_handler(self, join_cmd: Dict) -> Dict:
+        files, ip, port = join_cmd['files'], join_cmd['sender']['ip'], join_cmd['client_port']
+        sender_address = f'{ip}:{port}'
+        for file in files:
+            self.set_file_provider(file, ip, port)
+        print(f'Peer {sender_address} adicionado com arquivos {", ".join(files)}')
+        return self.join_ok_command_factory(files, sender_address)
+
+    def search_command_handler(self, search_cmd: Dict) -> Dict:
+        file_name, sender = search_cmd['file_name'], search_cmd['sender']
+        print(f'Peer {sender["ip"]}:{sender["port"]} está procurando pelo arquivo {file_name}')
+        search_result = self.get_file_providers(file_name)
+        return self.search_result_command_factory(search_result)
+    # endregion
+
     def close(self) -> None:
         self.server_socket.close()
 
@@ -99,7 +131,7 @@ class Server:
         def process_request(self, request: bytes) -> Dict:
             command = cmd.deserialize(request.decode())
             command['sender'] = {'ip': self.client_address[0], 'port': self.client_address[1]}
-            return cmd.server_handle(self.server, command)
+            return self.server.server_handle(command)
 
 def main():
     try:
