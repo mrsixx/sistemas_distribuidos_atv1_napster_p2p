@@ -1,12 +1,10 @@
 import os
 import sys
-import socket
-from threading import Thread
+import helpers
 from typing import Dict
+from threading import Thread
 from dataclasses import dataclass
-import command as cmd
-from mysocket import receive_all, download_file
-from file import list_files
+from socket import socket, AF_INET, SOCK_STREAM
 
 @dataclass
 class Client:
@@ -17,7 +15,7 @@ class Client:
         self._server_ip = '127.0.0.1'
         self._server_port = 1099
         # criação do socket para atender requisições de download e bind com ip:porta parametrizado
-        self._download_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._download_socket = socket(AF_INET, SOCK_STREAM)
         self._download_socket.bind((self.ip, self.port))
         self._download_socket.listen(5)
 
@@ -43,52 +41,52 @@ class Client:
         return self._server_port
     
     @property
-    def download_socket(self) -> socket.socket:
+    def download_socket(self) -> socket:
         return self._download_socket
     # endregion
 
     # region funções de comunicação com o servidor
     # envia um comando sem esperar pela resposta
-    def send_and_forget(self, socket: socket.socket, request_cmd: str) -> None:
-        cmd_str = cmd.serialize(request_cmd)
+    def send_and_forget(self, socket: socket, request_cmd: str) -> None:
+        cmd_str = helpers.json_serialize(request_cmd)
         socket.sendall(cmd_str.encode())
     # envia um comando e aguarda a resposta
-    def send_request(self, socket: socket.socket, request_cmd: Dict) -> str:
+    def send_request(self, socket: socket, request_cmd: Dict) -> str:
         self.send_and_forget(socket, request_cmd)
-        response = receive_all(socket)
+        response = helpers.socket_receive_all(socket)
         return response
     # envia a solicitação de download e caso permitida faz o download na pasta do client
-    def request_download(self, socket: socket.socket, download_cmd: Dict) -> bool:
+    def request_download(self, socket: socket, download_cmd: Dict) -> bool:
         # envia requisição de download
-        cmd_str = cmd.serialize(download_cmd)
+        cmd_str = helpers.json_serialize(download_cmd)
         socket.sendall(cmd_str.encode())
         # aguarda confirmação com propriedades do arquivo (se existe, etc)
-        file_prop_cmd = cmd.deserialize(receive_all(socket))
+        file_prop_cmd = helpers.json_deserialize(helpers.socket_receive_all(socket))
         file_name, file_size = file_prop_cmd['name'], file_prop_cmd['size']
         if file_size <= 0:
             return { 'success': False, 'message': f'{file_name} não existe.\n' }
         
         # faz o download do arquivo
-        download_status = download_file(self.path, file_name, file_size, socket)
+        download_status = helpers.download_file(self.path, file_name, file_size, socket)
         return download_status
 
-    def open_server_connection(self) -> socket.socket:
+    def open_server_connection(self) -> socket:
         try:
-            sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sk = socket(AF_INET, SOCK_STREAM)
             sk.connect((self.server_ip, self.server_port))
             return sk
         except ConnectionRefusedError:
             print('Servidor não aceitou a conexão')
     
-    def open_peer_connection(self, peer_ip: str, peer_port: int) -> socket.socket:
+    def open_peer_connection(self, peer_ip: str, peer_port: int) -> socket:
         try:
-            sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sk = socket(AF_INET, SOCK_STREAM)
             sk.connect((peer_ip, peer_port))
             return sk
         except ConnectionRefusedError:
             print(f'Peer {peer_ip}:{peer_port} não aceitou a conexão')
 
-    def close_server_connection(self, socket: socket.socket) -> None:
+    def close_server_connection(self, socket: socket) -> None:
         if socket is not None:
             socket.close()
     # endregion
@@ -100,9 +98,9 @@ class Client:
         try:
             if conn is not None:
                 # solicita a factory a criação de um join command
-                request_cmd = self.join_command_factory(list_files(self.path), self.port)
+                request_cmd = self.join_command_factory(helpers.list_path_files(self.path), self.port)
                 # envia o command ao server e aguarda o comando de resposta
-                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                response_cmd = helpers.json_deserialize(self.send_request(conn, request_cmd))
                 # processa o comando de resposta
                 self.join_ok_command_handler(response_cmd)
         finally:
@@ -116,7 +114,7 @@ class Client:
                 # solicita a factory a criação de um search command
                 request_cmd = self.search_command_factory(file_name)
                 # envia o command ao server e aguarda o comando de resposta
-                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                response_cmd = helpers.json_deserialize(self.send_request(conn, request_cmd))
                 self.search_result_command_handler(response_cmd)
         finally:
             self.close_server_connection(conn)
@@ -145,7 +143,7 @@ class Client:
                 # solicita a factory a criação de um update command
                 request_cmd = self.update_command_factory(file_name, self.port)
                 # envia o command ao server e aguarda o comando de resposta
-                response_cmd = cmd.deserialize(self.send_request(conn, request_cmd))
+                response_cmd = helpers.json_deserialize(self.send_request(conn, request_cmd))
                 self.update_ok_command_handler(response_cmd)
         finally:
             self.close_server_connection(conn)
@@ -270,7 +268,7 @@ class Client:
     
     # classe aninhada para tratar as solicitações de download despachadas
     class DownloadRequestHandlerThread(Thread):
-        def __init__(self, client, peer_socket: socket.socket, peer_address: str) -> None:
+        def __init__(self, client, peer_socket: socket, peer_address: str) -> None:
             Thread.__init__(self)
             self._client = client
             self._peer_socket = peer_socket
@@ -293,7 +291,7 @@ class Client:
         def run(self):
             try:
                 # aguardo o recebimento do download command
-                download_cmd = cmd.deserialize(receive_all(self.peer_socket))
+                download_cmd = helpers.json_deserialize(helpers.socket_receive_all(self.peer_socket))
                 # obtenho o nome do arquivo a partir do comando recebido
                 file_name = self.client.download_command_handler(download_cmd)
                 file_path = f'{self.client.path}/{file_name}'

@@ -35,7 +35,7 @@ O Napster P2P possui as seguintes funcionalidades:
 3. Execute a partir da raiz do projeto o comando `python -m pip install -r requirements.txt`
 4. Execute o servidor executando o arquivo `server.py`.
 5. Execute os peers executando o arquivo `peer.py`.
-6. Siga as instruções apresentadas na console para realizar ações como JOIN, SEARCH e DOWNLOAD.
+6. Siga as instruções apresentadas na console para realizar ações como JOIN, SEARCH, DOWNLOAD e UPDATE.
 
 ## 📜 Licença
 

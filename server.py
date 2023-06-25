@@ -1,9 +1,8 @@
+import helpers
 from socket import socket, AF_INET, SOCK_STREAM
 from dataclasses import dataclass
 from threading import Thread, Lock
 from typing import Dict, List
-from mysocket import receive_all
-import command as cmd
 
 @dataclass
 class Server:
@@ -134,15 +133,15 @@ class Server:
 
         # sobrescrevendo a função run
         def run(self):
-            request = receive_all(self.client_socket)
+            request = helpers.socket_receive_all(self.client_socket)
             response_cmd = self.process_request(request)
             if response_cmd is not None:
-                self.client_socket.sendall(cmd.serialize(response_cmd).encode())
+                self.client_socket.sendall(helpers.json_serialize(response_cmd).encode())
             self.client_socket.close()
 
         # aciona o command handler para dar o tratamento adequado de acordo com o comando recebido
         def process_request(self, request: bytes) -> Dict:
-            command = cmd.deserialize(request.decode())
+            command = helpers.json_deserialize(request.decode())
             command['sender'] = {'ip': self.client_address[0], 'port': self.client_address[1]}
             return self.server.server_handle(command)
 
