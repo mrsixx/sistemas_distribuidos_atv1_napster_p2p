@@ -6,7 +6,7 @@ Olá, seja bem-vindo ao projeto Napster P2P! Esse é um trabalho desenvolvido pa
 
 O objetivo desse projeto é construir um sistema P2P que permita a transferência de arquivos de vídeo gigantes (mais de 1 GB) entre os peers, usando o TCP como protocolo de comunicação. Vamos criar uma rede de compartilhamento de arquivos, onde os peers poderão enviar e receber arquivos de outros peers, intermediados por um servidor centralizado.
 
-### Demonstração (clique para ver o vídeo) 📽️
+### 📽️ Demonstração (clique para ver o vídeo) 
 
 [![Veja o vídeo de demonstração](https://img.youtube.com/vi/oNyjzk0ND20/maxresdefault.jpg)](https://youtu.be/oNyjzk0ND20)
 
